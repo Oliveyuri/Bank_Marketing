@@ -3,7 +3,7 @@ Estudo de Caso sobre Bank Marketing.
 
 Os dados fornecidos nesta tabela representam informações relacionadas a uma amostra de clientes. Cada linha corresponde a um cliente e contém diversos atributos relevantes para análise. Esses dados são valiosos para compreender o comportamento e as características dos clientes, auxiliando em estratégias de negócio e tomada de decisões sobretudo para venda de Títulos de Investimento.
 
-Variáveis analisadas: 
+# Variáveis analisadas: 
 
 ## Cliente_Comprou_o_Titulo.:
 
