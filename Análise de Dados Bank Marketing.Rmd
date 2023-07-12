@@ -1,18 +1,18 @@
 ---
-title: >
+title: |
   ![](https://i.imgur.com/dSfRz5z.png){width=500px style="display: block;  margin: 0 auto;"}
-  Análise de Dados - Bank Marketing (Em construção)
+  <div style="text-align: left;">Análise de Dados - Bank Marketing (Em construção)</div> 
 author: "Yuri de Oliveira Braúna"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
-  html_document:
-    highlight: textmate
-    theme: flatly
-    number_sections: yes
-    toc: yes
-    toc_float:
-      collapsed: yes
-      smooth_scroll: no
+    html_document:
+       highlight: textmate
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
 ---
 
   <style>
