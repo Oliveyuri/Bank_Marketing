@@ -1,0 +1,736 @@
+---
+title: |
+  ![](https://i.imgur.com/dSfRz5z.png){width=500px style="display: block;  margin: 0 auto;"}
+  <div style="text-align: left;">Análise de Dados - Bank Marketing (Em construção)</div> 
+author: "Yuri de Oliveira Braúna"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+    html_document:
+       highlight: textmate
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
+---
+
+  <style>
+body {
+  text-align: justify;
+}
+</style>
+
+# Introdução
+  
+Os dados fornecidos nesta tabela representam informações relacionadas a uma amostra de clientes. Cada linha corresponde a um cliente e contém diversos atributos relevantes para análise. Esses dados são valiosos para compreender o comportamento e as características dos clientes, auxiliando em estratégias de negócio e tomada de decisões sobretudo para venda de Títulos de Investimento. A seguir veremos algums insights alcançados com a modelagem e visualização deste conjunto de dados.
+  
+  
+# Carregamento dos pacotes
+  
+```{r Pacotes, message=FALSE, warning=FALSE}
+library(dplyr)                              
+library(rstatix)                             
+library(emmeans)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(htmltools)
+library(scales)
+library(janitor)
+library(ggrastr)
+library(ggcorrplot)
+library(corrplot)
+```
+  
+  
+# Leitura e visualização do banco de dados
+  
+```{r Leitura e tipos de variáveis}
+dados_bank <- read.csv("bank_marketing.csv")
+glimpse(dados_bank)
+```
+  
+# Extração, transformação e carregamento do dataframe: 
+
+```{r Visualização banco}
+kable(head(dados_bank, 10), col.names = c("Cliente Comprou o Título?", "Idade", "Profissão", "Estado Civil", "Formação", "Cliente Devedor", "Saldo de Conta Corrente", "Tem Hipoteca", "Tem Empréstimo", "Quantidade de Ligações")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+# Ordenando a variável "Cliente Comprou o Título?":
+
+## Análise Descritiva:
+
+Os dados apresentados referem-se à análise do comportamento dos clientes em relação à compra de um título específico. Nessa amostra, foram registrados o número de clientes que adquiriram o título e aqueles que optaram por não comprá-lo. Além disso, foi calculada a porcentagem de clientes em cada categoria, com base no total geral de clientes observados.
+
+```{r analise_compra, cache = TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por compra.
+cliente_comprou <- dados_bank %>%
+  filter(Cliente_Comprou_o_Titulo. %in% c("Sim", "Não")) %>% 
+  group_by(Cliente_Comprou_o_Titulo.) %>% 
+  summarise(total_clientes_comprou = n()
+        )
+
+  # Calcular a frequência relativa e acumulada.
+cliente_comprou <- cliente_comprou %>%
+  mutate(`Frequência Relativa` = total_clientes_comprou / sum(total_clientes_comprou),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar a coluna de frequencia relativa (% de Clientes) e frequência acumulada para 2 casas decimais.
+cliente_comprou$`Frequência Relativa` <- percent(round(cliente_comprou$`Frequência Relativa`,2))
+cliente_comprou$`Frequência Acumulada` <- percent(cliente_comprou$`Frequência Acumulada`)
+
+kable(cliente_comprou, col.names = c("O Cliente Comprou o Título?", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização dos dados:
+
+* Aproximadamente metade dos clientes adquiriram o título, indicando uma divisão equilibrada entre aqueles que o compraram e aqueles que não o fizeram.
+* O número total de clientes é de 9.684, fornecendo uma base para dimensionar a amostra e entender a abrangência dos dados analisados.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(cliente_comprou, aes(x="", y = total_clientes_comprou, fill = Cliente_Comprou_o_Titulo.,  label=total_clientes_comprou))+
+  geom_bar(stat="identity",width = 0.3)+
+  coord_flip()+
+  geom_text(aes(x = "", y = total_clientes_comprou, label = paste0(total_clientes_comprou, " (", round(total_clientes_comprou / sum(total_clientes_comprou) * 100, 1), "%)"), hjust = ifelse(Cliente_Comprou_o_Titulo. == "Sim", 1.7, -0.7), vjust = 0.5))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  labs(x="", y= "Total de Clientes", title = "O Cliente comprou o Título de Investimento?")+
+  scale_fill_manual(values = c("Sim" = "deepskyblue", "Não" = "firebrick"))+
+  labs(fill = "O Cliente comprou o Título?")
+```
+
+Essa discrepância sugere que existe uma oportunidade de aumentar a venda do título de investimento para os clientes que ainda não o adquiriram. Pode ser interessante realizar ações de marketing direcionadas a esses clientes para incentivar a compra, lembrando que é de suma importância a mensuração dessa variável, pois com ela poderemos nortear todo o estudo de caso a seguir.
+
+
+# Ordenando a variável "Idade":
+
+## Análise Descritiva:
+A análise dos dados revela a distribuição dos clientes em diferentes faixas etárias. À medida que a faixa etária aumenta, a quantidade de clientes diminui, indicando uma concentração em faixas etárias mais jovens.
+
+```{r analise_variavel_idade, cache = TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+limites <- seq(18, 100, 10)
+# Mudar o campo Idade por faixa etária.
+dados_faixa_etaria <- dados_bank %>%
+  mutate(faixa_etaria = cut(Idade, breaks = limites, labels = paste(limites[-length(limites)], "-", limites[-1]), include.lowest = TRUE))
+
+# Calcular o total de clientes por faixa etária
+total_faixa_etaria <- dados_faixa_etaria %>%
+  group_by(faixa_etaria) %>%
+  summarise(total_clientes_faixa_etaria = n())
+
+# Calcular a frequência relativa (% Faixa Etária) e frequência acumulada
+total_faixa_etaria <- total_faixa_etaria %>%
+  mutate(`Frequência Relativa` = total_clientes_faixa_etaria / sum(total_clientes_faixa_etaria),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 3 casas decimais
+total_faixa_etaria$`Frequência Relativa` <- percent(round(total_faixa_etaria$`Frequência Relativa`,4))
+total_faixa_etaria$`Frequência Acumulada` <- percent(round(total_faixa_etaria$`Frequência Acumulada`,4))
+
+kable(head(total_faixa_etaria, 10), col.names = c("Faixa Etária", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização dos dados: {.tabset .tabset-fade}
+Ao analisar a distribuição por faixa etária, observamos que a faixa de 28 a 38 anos é o segmento com o maior número de clientes, representando cerca de 34.98% do total. Além disso, ao considerar a concentração dos clientes, identificamos que aproximadamente 84.55% dos clientes estão nas faixas etárias de 18 a 54 anos. 
+<br>
+Isso sugere que a maioria dos clientes está nessa faixa etária, o que ressalta a relevância de direcionar campanhas de marketing e produtos específicos para atender às características e necessidades desses dois grupos específicos.
+
+
+### **Gráfico de Pareto:**
+
+```{r grafico_pareto_idade, cache = TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_faixa_etaria$`Frequência Relativa` <- as.numeric(gsub("%", "", total_faixa_etaria$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_faixa_etaria$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_faixa_etaria) +
+  geom_col(mapping = aes(x = faixa_etaria, y = total_clientes_faixa_etaria, fill = "Total de Clientes"), position = "dodge", width = 0.9) +
+  geom_text(aes(x = faixa_etaria, y = total_clientes_faixa_etaria, label = paste0(total_clientes_faixa_etaria, " (", round(total_clientes_faixa_etaria / sum(total_clientes_faixa_etaria) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.2, hjust = 0.5, size = 3, color = "black") +
+  geom_line(mapping = aes(x = faixa_etaria, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = faixa_etaria, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`),3), "%"), color = "firebrick"), vjust = -1, size = 3, hjust = 0.2, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Faixa Etária", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  theme(legend.position = "top") +
+  labs(fill = "") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+A faixa etária entre 30 e 40 anos possui a maior frequência de clientes, representando uma oportunidade de mercado significativa. Outro insight relevante é que as faixas etárias mais jovens, como abaixo de 20 anos e acima de 60 anos, apresentam um número menor de clientes em comparação com outras faixas etárias. Isso sugere a possibilidade de explorar oportunidades de expansão e captação de novos clientes nessas faixas etárias menos representadas. 
+
+Estratégias de marketing direcionadas, como ofertas especiais ou campanhas personalizadas, podem ser desenvolvidas para atrair e engajar esse público-alvo, buscando aumentar a base de clientes e impulsionar o crescimento da empresa.
+
+
+### **Histograma:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Criar os intervalos de idade
+intervalos <- seq(18, 100, 5)
+
+# Agrupar as idades nos intervalos
+dados_bank <- dados_bank %>%
+  mutate(Faixa_Idade = cut(Idade, breaks = intervalos, labels = paste(intervalos[-length(intervalos)], intervalos[-1], sep = "-"), include.lowest = TRUE))
+
+# Contar a frequência de cada faixa de idade
+frequencia <- dados_bank %>%
+  group_by(Faixa_Idade) %>%
+  summarise(Frequencia = n())
+
+# Plotar o histograma com rótulos
+ggplot(data = frequencia) +
+  geom_bar(mapping = aes(x = Faixa_Idade, y = Frequencia, fill = "Idade"), stat = "identity") +
+  geom_text(aes(x = Faixa_Idade, y = Frequencia, label = Frequencia), vjust = -0.5, color = "black", size = 3) +
+  labs(x = "Faixa de Idade", y = "Total de Clientes", title = "Histograma de Idade dos Clientes") +
+  scale_fill_manual(values = "deepskyblue") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+O gráfico de histograma representa a distribuição da idade dos clientes em diferentes faixas. Cada coluna do histograma representa uma faixa de idade e a altura das colunas indica a frequência com que os clientes estão presentes em cada faixa.
+
+Neste gráfico, podemos observar a distribuição da idade dos clientes, com base nos intervalos de 5 anos. Cada faixa de idade é representada no eixo x, enquanto o eixo y representa a frequência de clientes em cada faixa. Os rótulos acima de cada coluna mostram a contagem exata de clientes em cada faixa de idade.
+
+Essa representação visual nos permite identificar quais faixas etárias possuem maior ou menor número de clientes, contribuindo para uma melhor compreensão da distribuição da idade no conjunto de dados.
+
+### **Gráfico Violin Plot:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Definir cores para a escala de cores
+cores <- c("Não" = "firebrick", "Sim" = "deepskyblue")
+
+ggplot(data = dados_bank, aes(x = Cliente_Comprou_o_Titulo., y = Idade, fill = Cliente_Comprou_o_Titulo.)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.1, fill = "gray", color = "black", outlier.shape = NA) +
+  geom_jitter(height = 0, width = 0.2, color = "black", alpha = 0) +
+  geom_point(data = subset(dados_bank, Idade > quantile(Idade, 0.75) + 1.5*IQR(Idade) | Idade < quantile(Idade, 0.25) - 1.5*IQR(Idade)), aes(y = Idade), color = "black", shape = 16, size = 3, alpha = 0.3) +
+  geom_point(stat = "summary", fun = "mean", shape = 4, size = 3, color = "black") +
+  geom_text(stat = "summary", fun = "mean", aes(label = round(..y..)), vjust = -1, color = "black", size = 3) +
+  labs(y = "Idade", x = "O cliente Comprou?", title = "Violin Plot de Compra por Idade") +
+  scale_fill_manual(values = cores) +
+  scale_y_continuous(breaks = seq(0, 95, 5)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+O gráfico de boxplot exibe a distribuição da idade dos clientes, destacando informações importantes sobre os dados. Os retângulos representam a interquartilidade dos dados, onde a linha mediana divide o retângulo ao meio. Os "bigodes" estendem-se até os valores mínimo e máximo não considerados como outliers.
+
+Neste gráfico, também é apresentada a média da idade dos clientes, representada por um ponto azul. A média é calculada como a medida de tendência central dos dados e fornece uma estimativa do valor médio da idade dos clientes.
+
+Além disso, os outliers são representados como pontos individuais. Esses valores estão fora do intervalo da interquartilidade e podem indicar observações atípicas ou incomuns na distribuição da idade.
+
+A análise desses elementos do boxplot nos permite compreender melhor a distribuição e a tendência central da idade dos clientes, bem como identificar valores extremos que podem merecer uma atenção especial na análise dos dados.
+
+# Ordenando a variável "Estado Civil":
+
+## Análise Descritiva:
+
+Esses dados representam a distribuição dos clientes com base no seu estado civil. Ao analisar essas informações, podemos observar que a maioria dos clientes (56.5%) é casada, seguida pelos clientes solteiros (32.6%). Os clientes divorciados representam uma parcela menor (10.9%) do total. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por estado civil
+total_estado_civil <- dados_bank %>%
+  group_by(Estado_Civil) %>%
+  summarise(total_clientes_estado_civil = n())
+
+# Calcular a frequência relativa e acumulada.
+total_estado_civil <- total_estado_civil %>%
+  mutate(`Frequência Relativa` = total_clientes_estado_civil / sum(total_clientes_estado_civil),
+        `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 2 casas decimais,
+total_estado_civil$`Frequência Relativa` <- percent(round(total_estado_civil$`Frequência Relativa`,2))
+total_estado_civil$`Frequência Acumulada` <- percent(round(total_estado_civil$`Frequência Acumulada`,2))
+
+kable(total_estado_civil, col.names = c("Estado Civil", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+## Análise Exploratória e visualização dos dados: {.tabset .tabset-fade}
+
+Embora os clientes casados sejam predominantes, os clientes solteiros também possuem uma presença considerável, representando 32.6% do total. Isso indica que a empresa possui uma base sólida de clientes solteiros que pode ser alvo de estratégias de marketing específicas.
+
+### **Gráfico de Pareto:**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_estado_civil$`Frequência Relativa` <- as.numeric(gsub("%", "", total_estado_civil$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_estado_civil$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_estado_civil) +
+  geom_col(mapping = aes(x = Estado_Civil, y = total_clientes_estado_civil, fill = "Total de Clientes"), position = "dodge", width = 0.5) +
+  geom_text(aes(x = Estado_Civil, y = total_clientes_estado_civil, label = paste0(total_clientes_estado_civil, " (", round(total_clientes_estado_civil / sum(total_clientes_estado_civil) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.2, hjust = 0.5, size = 3, color = "black") +
+  geom_line(mapping = aes(x = Estado_Civil, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = Estado_Civil, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`)), "%"), color = "firebrick"), vjust = -1, size = 3, hjust = -0.2, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Estado Civil", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  labs(fill = "") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Menor representação de clientes divorciados: Os clientes divorciados correspondem a uma parcela menor (10.9%) do total de clientes. Essa descoberta destaca a importância de compreender as necessidades e preferências desse grupo específico para adaptar as abordagens de atendimento e comunicação.
+
+# Ordenando a variável "Profissão":
+
+## Análise Descritiva:
+Nesta análise, examinamos dados relacionados às profissões dos clientes. Os dados incluem o número de clientes em cada profissão, a porcentagem de clientes em relação ao total e a frequência acumulada das profissões.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por profissão.
+total_profissao <- dados_bank %>%
+  group_by(Profissao) %>%
+  summarise(total_clientes_profissao = n())
+
+# Calcular a frequência relativa e acumulada.
+total_profissao <- total_profissao %>%
+  mutate(`Frequência Relativa` = total_clientes_profissao / sum(total_clientes_profissao),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 3 casas decimais.
+total_profissao$`Frequência Relativa` <- percent(round(total_profissao$`Frequência Relativa`, 3))
+total_profissao$`Frequência Acumulada` <- percent(round(total_profissao$`Frequência Acumulada`, 3))
+
+# Exibir a tabela reordenada.
+kable(total_profissao, col.names = c("Profissão", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+## Análise Exploratória e visualização de dados: {.tabset .tabset-fade}
+
+Uma das primeiras observações notáveis é a presença de uma grande variedade de profissões entre os clientes. A análise revela que a maioria dos clientes (35,1%) é composta por administradores. Além disso, os operários também representam uma porcentagem significativa (16,7%) do total de clientes. Outro ponto interessante é que há uma porcentagem significativa de aposentados (7,3%) entre os clientes. Isso pode indicar uma oportunidade de oferecer serviços financeiros específicos para atender às necessidades dos aposentados, como investimentos de longo prazo, planos de previdência complementar ou outros produtos financeiros que sejam adequados para essa fase da vida.
+
+### **Gráfico de Pareto:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_profissao$`Frequência Relativa` <- as.numeric(gsub("%", "",total_profissao$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_profissao$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_profissao) +
+  geom_col(mapping = aes(x = Profissao, y = total_clientes_profissao, fill = "Total de Clientes"), position = "dodge", width = 0.9) +
+  geom_text(aes(x = Profissao, y = total_clientes_profissao, label = paste0(total_clientes_profissao, " (", round(total_clientes_profissao / sum(total_clientes_profissao) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.2, hjust = 0.5, size = 2.8, color = "black") +
+  geom_line(mapping = aes(x = Profissao, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = Profissao, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`)), "%"), color = "firebrick"), vjust = 1, size = 3, hjust = 0.2, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Profissão", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  theme(legend.position = "top")+
+  labs(fill = "") +
+  theme(  plot.title = element_text(hjust = 0.5),
+  axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+O gráfico revela a distribuição do total de clientes por profissão, mostrando a quantidade de clientes associados a cada profissão específica. Em resumo, o gráfico revela a diversidade das profissões dos clientes e destaca a necessidade de segmentação e personalização das estratégias de marketing. Compreender as diferentes necessidades e características de cada segmento profissional pode permitir à instituição financeira oferecer soluções mais direcionadas e eficazes, aumentando a satisfação e fidelidade dos clientes.
+
+# Ordenando a variável "Formação":
+
+## Análise Descritiva: 
+
+Nesta análise, examinamos os dados relacionados à formação educacional dos clientes através da categorização por nível de formação (fundamental, ensino médio, ensino superior e desconhecido), buscando entender a distribuição dos clientes em cada grupo.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por Formação.
+total_formacao <- dados_bank %>%
+  group_by(Formacao) %>% 
+  summarise(total_clientes_formacao = n()
+      )
+# Calcular a Frequência Relativa e Frequência Acumulada.
+total_formacao <- total_formacao %>%
+  mutate(`Frequência Relativa` = total_clientes_formacao / sum(total_clientes_formacao),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+#Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 3 casas decimais.
+total_formacao$`Frequência Relativa` <- percent(round(total_formacao$`Frequência Relativa`, 3))
+total_formacao$`Frequência Acumulada` <- percent(round(total_formacao$`Frequência Acumulada`, 3))
+
+kable(total_formacao, col.names = c("Formação", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização dos dados: {.tabset .tabset-fade}
+
+Com base na análise dos dados de formação dos clientes, podemos concluir que a maioria dos clientes possui formação no Ensino Médio, enquanto uma proporção significativa possui Ensino Superior. Essas observações podem ser utilizados pela instituição financeira para segmentar suas estratégias de marketing, adaptando seus produtos e serviços para atender às necessidades e expectativas específicas dos clientes com diferentes níveis de formação educacional.
+
+### **Gráfico de Pareto:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_formacao$`Frequência Relativa` <- as.numeric(gsub("%","", total_formacao$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_formacao$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_formacao) +
+  geom_col(mapping = aes(x = Formacao, y = total_clientes_formacao, fill = "Total de Clientes"), position = "dodge", width = 0.7) +
+  geom_text(aes(x = Formacao, y = total_clientes_formacao, label = paste0(total_clientes_formacao, " (", round(total_clientes_formacao / sum(total_clientes_formacao) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.3, hjust = 0.5, size = 3.2, color = "black") +
+  geom_line(mapping = aes(x = Formacao, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = Formacao, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`),3), "%"), color = "firebrick"), vjust = 0.5, size = 3, hjust = -0.2, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Formação", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  labs(fill = "") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+* A maioria dos clientes, correspondendo a 48.7%, possui formação de nível médio, tornando essa categoria a mais representativa.
+* A categoria "Ensino Superior" também é significativa, abrangendo cerca de 33.5% dos clientes.
+* A categoria "Fundamental" representa 13.1% dos clientes, indicando outra parcela significativa na amostra.
+
+Essas informações sugerem que uma estratégia de marketing direcionada a essas três categorias educacionais pode ser eficaz para alcançar a maioria dos clientes.
+
+#### **Categoria "Desconhecido" e sua relevância:**
+
+* A categoria "Desconhecido" representa 4.7% dos clientes, indicando que há uma parcela da amostra em que a formação educacional não foi identificada ou fornecida. Essa informação destaca a importância de futuras pesquisas e esforços de coleta de dados para obter uma compreensão mais completa do perfil educacional dos clientes.
+* Melhorar a precisão das análises e estratégias relacionadas requer a obtenção de informações sobre a formação educacional desses clientes desconhecidos.
+
+# Ordenando a variável "Cliente Devedor":
+
+## Análise Descritiva:
+
+Com base nos dados disponíveis, observamos que a maioria esmagadora dos clientes, representando 99,3% do total, não são devedores. Isso indica que a grande maioria dos clientes está em dia com seus pagamentos e não possui pendências financeiras com a empresa.
+
+```{r  analise_cliente_devedor, cache = TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por dívida.
+total_devedor <- dados_bank %>%
+  filter(Cliente_Devedor. %in% c("Sim", "Não")) %>%
+  group_by(Cliente_Devedor.) %>% 
+  summarise(total_clientes_devedor = n()
+  )
+  
+# Calcular a Frequência Relativa e Frequência Acumulada.
+total_devedor <- total_devedor %>%
+  mutate(`Frequencia Relativa` = total_clientes_devedor / sum(total_clientes_devedor),
+         `Frequencia Acumulada` = cumsum(`Frequencia Relativa`))
+
+# Arredondar a frequência relativa (% de Clientes) e frequência acumulada para 2 casas decimais.
+total_devedor$`Frequencia Relativa` <- percent(round(total_devedor$`Frequencia Relativa`,2))
+total_devedor$`Frequencia Acumulada` <- percent(round(total_devedor$`Frequencia Acumulada`,2))
+
+
+kable(total_devedor, col.names = c("O Cliente Deve?", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Explorátoria e visualização dos dados: {.tabset .tabset-fade}
+Supondo que clientes com saúde financeira positiva estão interessados em expandir suas opções de investimento e buscam oportunidades para aumentar seus retornos financeiros, como poderíamos melhorar a oferta de produtos de investimento para aumentar as vendas?
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(total_devedor, aes(x="", y = total_clientes_devedor, fill = Cliente_Devedor.,  label=total_clientes_devedor))+
+  geom_bar(stat="identity",width = 0.3)+
+  coord_flip()+
+  geom_text(aes(x = "", y = total_clientes_devedor, label = paste0(total_clientes_devedor, " (", round(total_clientes_devedor / sum(total_clientes_devedor) * 100, 1), "%)"), hjust = ifelse(Cliente_Devedor. == "Sim", 0.3, 1.5), vjust = 0.5))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  labs(x="", y= "Total de Clientes", title = "O Cliente é devedor?")+
+  scale_fill_manual(values = c("Não" = "deepskyblue", "Sim" = "firebrick"))+
+  labs(fill = "O cliente é devedor?")
+```
+
+Aqui vêmos algumas possíveis respostas para essa pergunta:
+
+1. Realizar uma análise do perfil dos clientes com saúde financeira positiva para entender suas preferências e objetivos de investimento.
+2. Oferecer uma ampla gama de produtos de investimento para atender às diferentes necessidades dos clientes.
+3. Fornecer recursos educacionais e serviços de consultoria para ajudar os clientes a tomar decisões informadas.
+4. Desenvolver estratégias de comunicação personalizadas para os clientes.
+5. Estabelecer parcerias estratégicas para oferecer uma experiência abrangente aos clientes.
+
+# Ordenando a variável "Saldo de Conta Corrente":
+
+## Análise Descritiva:
+
+Os dados apresentam informações sobre o saldo em conta corrente de um conjunto de clientes. Cada faixa de saldo é representada por um intervalo específico, e para cada faixa, são fornecidos o total de clientes, a frequência relativa (em relação ao total de clientes) e a frequência acumulada.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+limites <- c(1, seq(1500, 15000, 1500), 30000)
+
+dados_saldo_cc <- dados_bank %>%
+  mutate(faixa_saldo = cut(Saldo_Conta_Corrente, breaks = limites, labels = paste(limites[-length(limites)], "-", limites[-1]), include.lowest = TRUE)) %>%
+  mutate(faixa_saldo = ifelse(Saldo_Conta_Corrente > 15000, ">15000", as.character(faixa_saldo))) %>%
+    mutate(faixa_saldo = reorder(faixa_saldo, Saldo_Conta_Corrente))
+
+# Calcular o total de clientes por Saldo em Conta Corrente.
+total_saldocc <- dados_saldo_cc %>% 
+  group_by(faixa_saldo) %>% 
+  summarise(total_clientes_saldocc = n())
+
+# Calcular a frequência relativa e acumulada.
+total_saldocc <- total_saldocc %>%
+  mutate(`Frequência Relativa` = total_clientes_saldocc / sum(total_clientes_saldocc),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 3 casas decimais.
+total_saldocc$`Frequência Relativa` <- percent(round(total_saldocc$`Frequência Relativa`,3))
+total_saldocc$`Frequência Acumulada` <- percent(round(total_saldocc$`Frequência Acumulada`,3))
+
+kable(slice(total_saldocc,1:11), col.names = c("Saldo em Conta Corrente", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização de dados: {.tabset .tabset-fade}
+
+A análise dos dados de saldo em conta corrente dos clientes revela que a maioria deles possui saldos mais baixos, concentrando-se na faixa de 1 a 1501. A frequência acumulada mostra que a maior parte dos clientes possui saldos de até 3001. Esses insights sugerem a possibilidade de segmentar os clientes com base nos saldos em conta corrente e desenvolver estratégias de atendimento adequadas às suas características financeiras.
+
+### **Gráfico de Pareto:**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_saldocc$`Frequência Relativa` <- as.numeric(gsub("%","", total_saldocc$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_saldocc$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_saldocc) +
+  geom_col(mapping = aes(x = faixa_saldo, y = total_clientes_saldocc, fill = "Total de Clientes"), position = "dodge", width = 0.9) +
+  geom_text(aes(x = faixa_saldo, y = total_clientes_saldocc, label = paste0(total_clientes_saldocc, " (", round(total_clientes_saldocc / sum(total_clientes_saldocc) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.3, hjust = 0.5, size = 2.7, color = "black") +
+  geom_line(mapping = aes(x = faixa_saldo, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = faixa_saldo, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`),3), "%"), color = "firebrick"), vjust = -0.5, size = 3, hjust = 0.6, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Saldo em Conta", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(legend.position = "top")+
+  labs(fill = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+É perceptível que algumas faixas possuem um número maior de clientes, indicando uma concentração de contas em determinados intervalos de saldo.
+A análise do gráfico nos permite visualizar a distribuição do saldo em conta dos clientes e os segmentos dos mesmos afim de diferenciar os níveis de recursos financeiros. Essa segmentação pode ser útil para adaptar as estratégias de oferta de produtos e serviços, considerando as necessidades e preferências específicas de cada grupo.
+
+### **Gráfico BoxPlot:**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(data = dados_bank, aes(y = Saldo_Conta_Corrente, x = Cliente_Comprou_o_Titulo.)) +
+  geom_errorbar(stat = "boxplot", width = 0.2) +
+  geom_boxplot_jitter(width = 0.6, fill = "grey90",
+                      outlier.shape = 1, outlier.size = 2,
+                      outlier.jitter.height = 0.7,
+                      outlier.jitter.width = 0.3,
+                      dotsize = 0.7) +
+  geom_point(stat = "summary", fun = "mean", shape = 4, size = 3)+
+  labs(y = "Saldo em Conta Corrente", x = "O cliente Comprou?", title = "BoxPlot de Compra por Saldo Em Conta Corrente") +
+  scale_y_continuous(breaks = seq(0, 30000, 3000)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Ordenando a variável "Tem Hipoteca?":
+
+## Análise Descritiva:
+
+Neste conjunto de dados, estamos analisando a variável "O Cliente Tem Hipoteca?" e examinando o número de clientes e suas frequências relativas e acumuladas. O objetivo é obter insights sobre a distribuição dos clientes com e sem hipoteca.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Calcular o total de clientes por hipoteca.
+total_hipoteca <- dados_bank %>%
+  filter(Tem_Hipoteca. %in% c("Sim", "Não")) %>% 
+  group_by(Tem_Hipoteca.) %>% 
+  summarise(total_clientes_hipoteca = n()
+        )
+
+  # Calcular a frequência relativa e acumulada.
+total_hipoteca <- total_hipoteca %>%
+  mutate(`Frequência Relativa` = total_clientes_hipoteca / sum(total_clientes_hipoteca),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))                         
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 2 casas decimais.
+total_hipoteca$`Frequência Relativa` <- percent(round(total_hipoteca$`Frequência Relativa`, 2))
+total_hipoteca$`Frequência Acumulada` <- percent(round(total_hipoteca$`Frequência Acumulada`, 2))
+
+kable(total_hipoteca, col.names = c("O Cliente Tem Hipoteca?", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+Ao observar a coluna de frequência relativa, podemos notar que a maioria dos clientes (54.3%) não possui hipoteca. Isso sugere que mais da metade dos clientes na amostra analisada não têm esse compromisso financeiro. Essa informação pode ser relevante para entender o perfil dos clientes e auxiliar em estratégias de segmentação ou oferta de produtos e serviços.
+<br>
+O insight de que aproximadamente 45.7% dos clientes possuem hipoteca levanta uma interessante reflexão sobre como essa condição pode influenciar o comportamento de compra de títulos de investimento em comparação com aqueles que não possuem esse compromisso financeiro.
+<br>
+
+## Análise Exploratória e visualização de dados: {.tabset .tabset-fade}
+
+No contexto financeiro, clientes com hipoteca podem enfrentar desafios adicionais, pois o pagamento regular das parcelas do empréstimo imobiliário compromete parte de sua renda. Isso pode afetar a disponibilidade de recursos para outros tipos de investimentos e levar a uma postura mais cautelosa em relação a riscos.
+
+### **Gráfico de Barras:**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(total_hipoteca, aes(x="", y = total_clientes_hipoteca, fill = Tem_Hipoteca.,  label=total_clientes_hipoteca))+
+  geom_bar(stat="identity",width = 0.3)+
+  coord_flip()+
+  geom_text(aes(x = "", y = total_clientes_hipoteca, label = paste0(total_clientes_hipoteca, " (", round(total_clientes_hipoteca / sum(total_clientes_hipoteca) * 100, 1), "%)"), hjust = ifelse(Tem_Hipoteca. == "Sim", 1.7, -0.4), vjust = 0.5))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  labs(x="", y= "Total de Clientes", title = "O Cliente tem Hipoteca?")+
+  scale_fill_manual(values = c("Sim" = "firebrick", "Não" = "deepskyblue"))+
+  labs(fill = "O Cliente tem hipoteca?")
+```
+
+Uma explicação plausível é que os clientes com hipoteca priorizam o pagamento da dívida e, portanto, têm menos disponibilidade financeira para investir em títulos ou assumir riscos adicionais. No entanto, é importante destacar que essa análise tem suas limitações e não permite estabelecer uma relação causal direta. São necessárias investigações adicionais para compreender melhor essa associação e confirmar as hipóteses levantadas.
+
+# Ordenando a variável "Tem Empréstimo?": 
+
+## Análise Descritiva:
+
+Neste conjunto de dados, analisamos a presença ou ausência de empréstimos entre os clientes. A variável indica se um cliente possui ou não um empréstimo. Vamos explorar a distribuição dos clientes com base nessa variável e examinar a frequência relativa e acumulada para obter insights sobre a presença de empréstimos em relação ao total de clientes.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+cliente_emprestimo <- dados_bank %>%
+  filter(Tem_Emprestimo. %in% c("Sim", "Não")) %>% 
+  group_by(Tem_Emprestimo.) %>% 
+  summarise(total_clientes_emprestimo = n()
+        )
+
+  # Calcular a frequência relativa em %
+cliente_emprestimo <- cliente_emprestimo %>%
+  mutate(`Frequência Relativa` = (total_clientes_emprestimo / sum(total_clientes_emprestimo)) * 100)
+
+# Calcular a frequência acumulada em %
+cliente_emprestimo<- cliente_emprestimo %>%
+  mutate(`Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 1 casa decimal
+cliente_emprestimo$`Frequência Relativa` <- paste0(round(cliente_emprestimo$`Frequência Relativa`, 1),"%")
+cliente_emprestimo$`Frequência Acumulada` <- paste0(round(cliente_emprestimo$`Frequência Acumulada`, 1), "%")
+
+kable(cliente_emprestimo, col.names = c("O Cliente Tem Empréstimo?", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização dos dados: {.tabset .tabset-fade}
+
+A maioria dos clientes, correspondendo a 88.4% do total, não possui empréstimos.Esses clientes podem desfrutar de uma posição financeira mais estável, com menos obrigações de dívida, o que resulta em maior disponibilidade de recursos para investir. 
+Essa maior disponibilidade financeira pode incentivar esses clientes a considerar a compra de títulos de investimento como uma estratégia para fazer seu dinheiro crescer no longo prazo.
+
+### **Gráfico de Barras:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(cliente_emprestimo, aes(x="", y = total_clientes_emprestimo, fill = Tem_Emprestimo.,  label=total_clientes_emprestimo))+
+  geom_bar(stat="identity",width = 0.3)+
+  coord_flip()+
+  geom_text(aes(x = "", y = total_clientes_emprestimo, label = paste0(total_clientes_emprestimo, " (", round(total_clientes_emprestimo / sum(total_clientes_emprestimo) * 100, 1), "%)"), hjust = ifelse(Tem_Emprestimo. == "Sim", 0.55, 0.5), vjust = 0.5,), size = 3.5)+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  labs(x="", y= "Total de Clientes", title = "O Cliente tem Empréstimo?")+
+  scale_fill_manual(values = c("Sim" = "firebrick", "Não" = "deepskyblue"))+
+  labs(fill = "O Cliente tem empréstimo?")
+```
+
+Os clientes com empréstimos representam 11.6% do total e possuem compromissos financeiros adicionais. A necessidade de alocar recursos para o pagamento de empréstimos diminui a disponibilidade de fundos para investimentos de longo prazo.Isso nos faz pensar se a presença ou ausência de empréstimos é um fator que influencia a decisão dos clientes em relação à compra de títulos.
+Fato é que clientes com empréstimos enfrentam desafios adicionais devido às suas obrigações de dívida, o que pode limitar sua capacidade de considerar e realizar investimentos.
+
+# Ordenando a Variável "Quantidade de ligações feitas":
+
+## Análise Descritiva:
+
+Essa análise descritiva nos fornece informações sobre a distribuição da quantidade de ligações feitas aos clientes para que eles decidam se desejam comprar ou não os títulos oferecido. A maioria dos clientes (82,42%) recebeu de 1 a 3 ligações para tomarem sua decisão. À medida que a quantidade de ligações aumenta, o número de clientes diminui gradualmente. É interessante observar que uma pequena parcela de clientes (0,27%) precisou de mais de 21 ligações para efetuar a venda.
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+limites <- c(1, seq(3, 21, 3), 63)
+
+# Criar a coluna "Qtd de Ligação"
+dados_qtd_ligacao <- dados_bank %>%
+  mutate(faixa_qtd_ligacao = cut(Qte_de_Ligacoes_Feitas, breaks = limites, labels = paste0(limites[-length(limites)], " - ", limites[-1]), include.lowest = TRUE)) %>% 
+mutate(faixa_qtd_ligacao = ifelse(Qte_de_Ligacoes_Feitas > 21, ">21", as.character(faixa_qtd_ligacao))) %>%
+    mutate(faixa_qtd_ligacao = reorder(faixa_qtd_ligacao, Qte_de_Ligacoes_Feitas))
+
+# Calcular o total de clientes por faixa de quantidade de ligações
+total_qtd_ligacao <- dados_qtd_ligacao %>%
+  group_by(faixa_qtd_ligacao) %>%
+  summarise(total_clientes_qtd_ligacao = n())
+
+# Calcular a frequência relativa e acumulada.
+total_qtd_ligacao <- total_qtd_ligacao %>%
+  mutate(`Frequência Relativa` = total_clientes_qtd_ligacao / sum(total_clientes_qtd_ligacao),
+         `Frequência Acumulada` = cumsum(`Frequência Relativa`))
+
+# Arredondar as colunas de frequência relativa (% de Clientes) e frequência acumulada para 4 e 3 casas decimais
+total_qtd_ligacao$`Frequência Relativa` <- percent(round(total_qtd_ligacao$`Frequência Relativa`, 4))
+total_qtd_ligacao$`Frequência Acumulada` <- percent(round(total_qtd_ligacao$`Frequência Acumulada`, 3))
+
+kable(total_qtd_ligacao, col.names = c("Quantidade de Ligação", "Número de Clientes", "% de Clientes", "Frequência Acumulada")) %>%
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+## Análise Exploratória e visualização dos dados: {.tabset .tabset-fade}
+
+A concentração da maioria das decisões nas primeiras 1 a 3 ligações sugere que esses primeiros contatos são cruciais para a conversão das vendas. Isso pode indicar que a qualidade do atendimento, a capacidade de apresentar informações convincentes e o estabelecimento de um rapport positivo com o cliente são fatores importantes para garantir uma taxa de conversão favorável.
+
+
+### **Gráfico de Pareto:**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Remover o símbolo de % da coluna "Frequência Relativa"
+total_qtd_ligacao$`Frequência Relativa` <- as.numeric(gsub("%","", total_qtd_ligacao$`Frequência Relativa`))
+
+# Calcular a escala
+escala <- max(total_qtd_ligacao$`Frequência Relativa`)
+
+# Definir cores para a escala de cores
+cores <- c("Total de Clientes" = "deepskyblue", "Frequência Acumulada" = "firebrick")
+
+# Gerar o gráfico de Pareto
+ggplot(data = total_qtd_ligacao) +
+  geom_col(mapping = aes(x = faixa_qtd_ligacao, y = total_clientes_qtd_ligacao, fill = "Total de Clientes"), position = "dodge", width = 0.8) +
+   geom_text(aes(x = faixa_qtd_ligacao, y = total_clientes_qtd_ligacao, label = paste0(total_clientes_qtd_ligacao, " (", round(total_clientes_qtd_ligacao / sum(total_clientes_qtd_ligacao) * 100, 1), "%)"), color = "deepskyblue"), vjust = -0.5, hjust = 0.5, size = 2.7, color = "black") +
+  geom_line(mapping = aes(x = faixa_qtd_ligacao, y = cumsum(`Frequência Relativa`) * escala, fill = "Frequência Acumulada"), group = 1, color = "firebrick") +
+  geom_text(aes(x = faixa_qtd_ligacao, y = cumsum(`Frequência Relativa`) * escala, label = paste0(round(cumsum(`Frequência Relativa`),3), "%"), color = "firebrick"), vjust = -0.5, size = 3, hjust = 0.6, color = "black") +
+  scale_fill_manual(values = cores) +
+  scale_color_manual(values = cores) +
+  labs(x = "Saldo em Conta", y = "Total de Clientes", title = "Total de Clientes vs Frequência Acumulada") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(legend.position = "top")+
+  labs(fill = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Isso sugere a importância de treinar e capacitar a equipe de vendas para que possam aproveitar ao máximo essas primeiras interações com os clientes. Investir em técnicas de comunicação persuasiva, conhecimento aprofundado dos produtos e habilidades de escuta ativa pode aumentar as chances de sucesso na conversão desses primeiros contatos
+
+### **Gráfico BoxPlot:**
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+dados_combinados <- merge(dados_bank, total_qtd_ligacao, by = "total_clientes_qtd_ligacao")
+
+ggplot(data = dados_combinados, aes(x = total_clientes_qtd_ligacao, y = faixa_qtd_ligacao, fill = total_clientes_qtd_ligacao)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.1, fill = "gray", color = "black", outlier.shape = NA) +
+  geom_jitter(height = 0, width = 0.2, color = "black", alpha = 0) +
+  geom_point(data = subset(dados_combinados, total_clientes_qtd_ligacao > quantile(total_clientes_qtd_ligacao, 0.75) + 1.5 * IQR(total_clientes_qtd_ligacao) | total_clientes_qtd_ligacao < quantile(total_clientes_qtd_ligacao, 0.25) - 1.5 * IQR(total_clientes_qtd_ligacao)), aes(y = faixa_qtd_ligacao), color = "black", shape = 16, size = 3, alpha = 0.3) +
+  geom_point(stat = "summary", fun = "mean", shape = 4, size = 3, color = "black") +
+  geom_text(stat = "summary", fun = "mean", aes(label = round(..y..)), vjust = -1, color = "black", size = 3) +
+  labs(y = "Faixa de Quantidade de Ligações", x = "Total de Clientes na Quantidade de Ligações", title = "Violin Plot de Compra por Faixa de Quantidade de Ligações") +
+  scale_fill_manual(values = cores, drop = FALSE) +
+  scale_y_discrete(limits = unique(dados_combinados$faixa_qtd_ligacao)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
