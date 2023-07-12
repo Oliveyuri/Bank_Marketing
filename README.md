@@ -50,5 +50,5 @@ Valores possíveis: "Sim" ou "Não".
 
 ## Qte_de_Ligacoes_Feitas:
 
-Descrição: Representa a quantidade de ligações que foram necessárias para o cliente decidir pela compra ou não do título de investimento.
+Descrição: Representa a quantidade de ligações que foram necessárias para o cliente decidir se compra ou não o título de investimento.
 Tipo de dado: Número inteiro (int).
