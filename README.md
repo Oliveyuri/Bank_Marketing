@@ -14,7 +14,8 @@ Valores possíveis: "Sim" ou "Não".
 
 Descrição: Representa a idade do cliente.
 Tipo de dado: Número inteiro (int).
-Profissao:
+
+## Profissao:
 
 Descrição: Indica a profissão do cliente.
 Tipo de dado: Texto (string).
@@ -33,7 +34,8 @@ Tipo de dado: Texto (string).
 
 Descrição: Indica se o cliente possui dívidas.
 Valores possíveis: "Sim" ou "Não".
-Saldo_Conta_Corrente:
+
+## Saldo_Conta_Corrente:
 
 Descrição: Representa o saldo na conta corrente do cliente.
 Tipo de dado: Número inteiro (int).
